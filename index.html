@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>歯ブラシチェッカー by YourLoop</title>
+  <style>
+    /* ベーススタイル */
+    body { margin: 0; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #f5f5f5; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 16px; width: 90%; max-width: 400px; }
+    .hidden { display: none; }
+    h1 { font-size: 1.5rem; text-align: center; margin-bottom: 16px; }
+    /* 登録画面のテキスト中央寄せ */
+    #register-screen p { text-align: center; margin: 8px 0; }
+    /* 交換タイミング見出しの上余白 */
+    #register-screen p:nth-of-type(2) { margin-top: 16px; }
+    .btn { display: block; width: 100%; padding: 12px; margin: 8px 0; border: none; border-radius: 8px; background: #4CAF50; color: #fff; font-size: 1rem; cursor: pointer; }
+    .btn:active { opacity: 0.8; }
+    .btn-delete { background: #f44336; }
+    /* オプションを中央寄せ、間隔を調整 */
+    .options { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+    .option { flex: 1 1 30%; text-align: center; padding: 8px; border: 2px solid #ddd; border-radius: 8px; cursor: pointer; }
+    .option.selected { border-color: #4CAF50; background: #e8f5e9; }
+    img.icon { width: 64px; height: 64px; }
+    /* ホーム画面のアイコンを大きく */
+    #home-screen img.icon { width: 160px; height: 160px; }
+    /* プログレスバー */
+    .progress-container { width: 80%; height: 12px; background: #eee; border-radius: 6px; margin: 8px auto; overflow: hidden; }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      min-width: 8px; /* 0%でも8pxを表示 */
+      background: #4CAF50;
+      border-radius: 6px;
+    }
+    .status-row { display: flex; align-items: center; justify-content: space-between; }
+    /* ステータス画面のステータス部分を中央寄せ */
+    .status-row > div:first-child { flex: 1; text-align: center; }
+    .status-row span { font-size: 1rem; }
+    /* 交換予定日を中央寄せ */
+    #status-info p { text-align: center; margin: 12px 0; font-size: 1rem; }
+    .warning { font-size: 1.2rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <!-- ホーム画面 -->
+  <div id="home-screen" class="card">
+    <h1>歯ブラシチェッカー <br>by <br>YourLoop</h1>
+    <div style="text-align:center;"><img src="toothbrush.png" alt="歯ブラシ" class="icon"></div>
+    <button id="start-btn" class="btn">はじめる</button>
+  </div>
+
+  <!-- 登録画面 -->
+  <div id="register-screen" class="card hidden">
+    <h1>登録画面</h1>
+    <p>現在の消耗度合いを選択</p>
+    <div id="consumption-options" class="options">
+      <div class="option" data-value="100">
+        <img src="brush-100.png" alt="100%" class="icon"><br>100%
+      </div>
+      <div class="option" data-value="75">
+        <img src="brush-75.png" alt="75%" class="icon"><br>75%
+      </div>
+      <div class="option" data-value="50">
+        <img src="brush-50.png" alt="50%" class="icon"><br>50%
+      </div>
+      <div class="option" data-value="25">
+        <img src="brush-25.png" alt="25%" class="icon"><br>25%
+      </div>
+      <div class="option" data-value="0">
+        <img src="brush-0.png" alt="0%" class="icon"><br>0%
+      </div>
+    </div>
+    <p>交換タイミングを選択</p>
+    <div id="period-options" class="options">
+      <div class="option" data-days="14">早め (2週間)</div>
+      <div class="option" data-days="30">標準 (1ヶ月)</div>
+      <div class="option" data-days="60">長め (2ヶ月)</div>
+    </div>
+    <button id="register-btn" class="btn">登録</button>
+  </div>
+
+  <!-- ステータス画面 -->
+  <div id="status-screen" class="card hidden">
+    <h1>ステータス</h1>
+    <div id="status-info">
+      <div class="status-row">
+        <div>
+          <img id="status-img" src="brush-100.png" alt="ステータス" class="icon"><br>
+          <!-- プログレスバー -->
+          <div class="progress-container"><div id="progress-bar" class="progress-bar"></div></div>
+          <span id="status-percentage">100%</span>
+        </div>
+        <div class="warning" id="warning-icon">🔘</div>
+      </div>
+      <p>交換予定日: <span id="status-date"></span></p>
+    </div>
+    <button id="reset-btn" class="btn">交換した</button>
+    <button id="delete-btn" class="btn btn-delete">登録内容を削除</button>
+  </div>
+
+  <script>
+    // 画面要素取得
+    const home = document.getElementById('home-screen');
+    const register = document.getElementById('register-screen');
+    const status = document.getElementById('status-screen');
+    const startBtn = document.getElementById('start-btn');
+    const registerBtn = document.getElementById('register-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const deleteBtn = document.getElementById('delete-btn');
+    const warningIcon = document.getElementById('warning-icon');
+    const progressBar = document.getElementById('progress-bar');
+
+    let selConsumption = null;
+    let selPeriod = null;
+
+    // 画面切替関数
+    function showScreen(screen) {
+      [home, register, status].forEach(s => s.classList.add('hidden'));
+      screen.classList.remove('hidden');
+    }
+
+    // ホームから登録画面へ
+    startBtn.addEventListener('click', () => showScreen(register));
+
+    // オプション選択処理
+    document.querySelectorAll('#consumption-options .option').forEach(el => {
+      el.addEventListener('click', () => {
+        selConsumption = parseInt(el.dataset.value, 10);
+        document.querySelectorAll('#consumption-options .option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+      });
+    });
+    document.querySelectorAll('#period-options .option').forEach(el => {
+      el.addEventListener('click', () => {
+        selPeriod = parseInt(el.dataset.days, 10);
+        document.querySelectorAll('#period-options .option').forEach(o => o.classList.remove('selected'));
+        el.classList.add('selected');
+      });
+    });
+
+    // 登録処理
+    registerBtn.addEventListener('click', () => {
+      if (selConsumption === null || selPeriod === null) {
+        alert('消耗度合いと交換タイミングを選択してください');
+        return;
+      }
+      localStorage.setItem('consumption', selConsumption);
+      localStorage.setItem('period', selPeriod);
+      localStorage.setItem('timestamp', new Date().toISOString());
+      updateConsumption();
+      renderStatus();
+      showScreen(status);
+    });
+
+    // 消耗度合い更新処理
+    function updateConsumption() {
+      const storedCons = parseFloat(localStorage.getItem('consumption'));
+      const storedPeriod = parseFloat(localStorage.getItem('period'));
+      const lastTime = new Date(localStorage.getItem('timestamp'));
+      const now = new Date();
+      const elapsedMs = now - lastTime;
+      const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
+      const lost = (elapsedDays / storedPeriod) * 100;
+      let newCons = storedCons - lost;
+      if (newCons < 0) newCons = 0;
+      newCons = Math.round(newCons);
+      localStorage.setItem('consumption', newCons);
+      localStorage.setItem('timestamp', now.toISOString());
+    }
+
+    // ステータス表示レンダリング
+    function renderStatus() {
+      const cons = parseInt(localStorage.getItem('consumption'), 10);
+      const per = parseInt(localStorage.getItem('period'), 10);
+      const now = new Date();
+      const daysToAdd = per * (cons / 100);
+      const nextDate = new Date(now.getTime());
+      nextDate.setDate(now.getDate() + daysToAdd);
+
+      // 画像／テキスト更新
+      document.getElementById('status-img').src = `brush-${cons}.png`;
+      document.getElementById('status-percentage').textContent = `${cons}%`;
+
+      // プログレスバー更新
+      progressBar.style.width = `${cons}%`;
+      let color;
+      if (cons === 0) color = '#8B0000';       // 濃赤
+      else if (cons === 25) color = '#FF0000';  // 赤
+      else if (cons === 50) color = '#FFD700';  // 濃い黄色
+      else color = '#4CAF50';                   // 緑
+      progressBar.style.backgroundColor = color;
+
+      // 交換予定日更新
+      document.getElementById('status-date').textContent = nextDate.toLocaleDateString('ja-JP');
+    }
+
+    // "交換した"ボタンクリック
+    resetBtn.addEventListener('click', () => {
+      if (!confirm('歯ブラシを交換しましたか？')) return;
+      localStorage.setItem('consumption', 100);
+      localStorage.setItem('timestamp', new Date().toISOString());
+      renderStatus();
+    });
+
+    // 登録削除
+    deleteBtn.addEventListener('click', () => {
+      if (!confirm('登録内容を削除してもよろしいですか？')) return;
+      localStorage.removeItem('consumption');
+      localStorage.removeItem('period');
+      localStorage.removeItem('timestamp');
+      showScreen(home);
+    });
+
+    // 注意アイコンでクリップボードコピー
+    warningIcon.addEventListener('click', () => {
+      const data = {
+        consumption: localStorage.getItem('consumption'),
+        period: localStorage.getItem('period'),
+        timestamp: localStorage.getItem('timestamp')
+      };
+      navigator.clipboard.writeText(JSON.stringify(data)).then(() => {
+        alert('クリップボードの内容を開発者に送信すると、LINE等で通知が届きます。');
+      });
+    });
+
+    // 初期表示: 登録済みなら消耗度合い更新の上ステータス画面へ
+    if (localStorage.getItem('consumption') && localStorage.getItem('period')) {
+      updateConsumption();
+      renderStatus();
+      showScreen(status);
+    }
+  </script>
+</body>
+</html>
